@@ -1,4 +1,6 @@
-# i3gator
+# i3gator 
+
+🐊
 
 Yes, it's yet another i3 layout manager. But this one doesn't even pretend to
 do any declarative management of your i3 layouts, it's actually just a helper
