@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -260,6 +261,10 @@ func decodeWorkspace(
 					args = []string{typedValue}
 				case []string:
 					args = typedValue
+				case []interface{}:
+					for _, value := range typedValue {
+						args = append(args, fmt.Sprint(value))
+					}
 				default:
 					log.Fatalf("unexpected type of value for key: %s", key)
 				}
