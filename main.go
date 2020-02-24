@@ -82,7 +82,9 @@ func main() {
 }
 
 func createWorkspace(programs map[string]Program, label string, ops []Operation) {
-	switchWorkspace(label)
+	if label != "-" {
+		switchWorkspace(label)
+	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
