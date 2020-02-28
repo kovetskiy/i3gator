@@ -5,7 +5,8 @@ type Config struct {
 }
 
 type Program struct {
-	Exec []string `yaml:"exec" required:"true"`
+	Exec   []string `yaml:"exec" required:"true"`
+	Assign string
 }
 
 type Layout struct {

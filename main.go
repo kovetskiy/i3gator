@@ -203,7 +203,12 @@ func operate(label string, programs map[string]Program, vars map[string]string, 
 
 	worker.Wait()
 
-	vars[op.Program] = strings.TrimSpace(string(stdout))
+	varName := programs[op.Program].Assign
+	if varName == "" {
+		varName = op.Program
+	}
+
+	vars[varName] = strings.TrimSpace(string(stdout))
 }
 
 func getArgs(programs map[string]Program, vars map[string]string, op Operation) []string {
