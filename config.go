@@ -13,7 +13,10 @@ type Layout struct {
 	Workspaces map[string]Workspace `yaml:"workspaces" required:"true"`
 }
 
-type Workspace []interface{}
+type Workspace struct {
+	Check []interface{}
+	Do    []interface{}
+}
 
 type Operation struct {
 	Program string

@@ -71,35 +71,71 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	workspaces := map[string][]Operation{}
+	workspaces := map[string]protocol{}
 	for label, workspace := range layout.Workspaces {
-		ops := decodeWorkspace(config, label, workspace)
-		workspaces[label] = ops
+		check := decodeOperations(config, label, workspace.Check)
+		do := decodeOperations(config, label, workspace.Do)
+
+		workspaces[label] = protocol{
+			check: check,
+			do:    do,
+		}
 	}
 
-	for label, ops := range workspaces {
-		createWorkspace(config.Programs, label, ops)
+	for label, protocol := range workspaces {
+		createWorkspace(config.Programs, label, protocol)
 	}
 }
 
-func createWorkspace(programs map[string]Program, label string, ops []Operation) {
+type protocol struct {
+	check []Operation
+	do    []Operation
+}
+
+func createWorkspace(programs map[string]Program, label string, protocol protocol) {
 	if label != "-" {
 		switchWorkspace(label)
 	}
+	switchWorkspace(label)
 
 	cwd, err := os.Getwd()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	vars := map[string]string{}
-	for _, op := range ops {
+	// should DO if there are no checks
+	shouldDo := len(protocol.check) == 0
+
+	buffer := map[string]string{}
+	for _, op := range protocol.check {
 		if op.Program == "cwd" {
 			cwd = expandCWD(op.Args[0])
 			continue
 		}
 
-		operate(label, programs, vars, op, cwd)
+		code := operate(label, programs, buffer, op, cwd, "check")
+		if code != 0 {
+			// if a check failed, we definitely should DO
+			shouldDo = true
+			break
+		}
+	}
+
+	if !shouldDo {
+		return
+	}
+
+	vars := map[string]string{}
+	for _, op := range protocol.do {
+		if op.Program == "cwd" {
+			cwd = expandCWD(op.Args[0])
+			continue
+		}
+
+		code := operate(label, programs, vars, op, cwd, "do")
+		if code != 0 {
+			log.Fatalf("%q failed with exit code: %d", op, code)
+		}
 	}
 }
 
@@ -129,10 +165,17 @@ func switchWorkspace(label string) {
 	}
 }
 
-func operate(label string, programs map[string]Program, vars map[string]string, op Operation, cwd string) {
+func operate(
+	label string,
+	programs map[string]Program,
+	vars map[string]string,
+	op Operation,
+	cwd string,
+	act string,
+) int {
 	args := getArgs(programs, vars, op)
 
-	log.Printf("[%s] %s: %v", label, op.Program, args)
+	log.Printf("[%s %s] %s: %v", label, act, op.Program, args)
 
 	if len(args) == 0 {
 		panic("size of args is zero (expected 1+) for program " + op.Program)
@@ -191,24 +234,29 @@ func operate(label string, programs map[string]Program, vars map[string]string, 
 		log.Fatalln(err)
 	}
 
-	if state.ExitCode() != 0 {
-		log.Fatalf(
-			"%v exited with non-zero exit code %d",
-			args,
-			state.ExitCode(),
-		)
-	}
-
 	writer.Close()
 
 	worker.Wait()
 
+	result := strings.TrimSpace(string(stdout))
 	varName := programs[op.Program].Assign
 	if varName == "" {
 		varName = op.Program
 	}
 
-	vars[varName] = strings.TrimSpace(string(stdout))
+	vars[varName] = result
+
+	log.Printf(
+		"[%s %s] %s: %v exit_code=%d stdout=%s",
+		label,
+		act,
+		op.Program,
+		args,
+		state.ExitCode(),
+		result,
+	)
+
+	return state.ExitCode()
 }
 
 func getArgs(programs map[string]Program, vars map[string]string, op Operation) []string {
@@ -237,13 +285,13 @@ func getArgs(programs map[string]Program, vars map[string]string, op Operation) 
 	return args
 }
 
-func decodeWorkspace(
+func decodeOperations(
 	config Config,
 	label string,
-	workspace Workspace,
+	input []interface{},
 ) []Operation {
 	ops := []Operation{}
-	for _, raw := range workspace {
+	for _, raw := range input {
 		var op Operation
 		switch typed := raw.(type) {
 		case string:
@@ -271,7 +319,12 @@ func decodeWorkspace(
 						args = append(args, fmt.Sprint(value))
 					}
 				default:
-					log.Fatalf("unexpected type of value for key: %s", key)
+					log.Fatalf(
+						"unexpected type of value for key %s: %T %#v",
+						key,
+						typedValue,
+						typedValue,
+					)
 				}
 			}
 
